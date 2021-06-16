@@ -46,6 +46,8 @@ LOG_DEBUG = 3
 
 LOG_LEVEL = int(os.getenv('LOG_LEVEL'))
 
+REDIS_ENABLE = bool(int(os.getenv('REDIS_ENABLE')))
+
 
 def log(level, msg):
     if level <= LOG_LEVEL:
@@ -97,9 +99,13 @@ def get_mqtt_client():
     return client
 
 
-def get_from_redis(hash):
-    r = redis.Redis()
-    key = 'mp3_' + hash
+def get_redis_client():
+    return redis.Redis()
+
+
+def get_from_redis(hash_value):
+    r = get_redis_client()
+    key = 'mp3_' + hash_value
 
     if r.exists(key):
         log(LOG_INFO, 'Redis: Get key ' + key)
@@ -109,13 +115,13 @@ def get_from_redis(hash):
     return None
 
 
-def add_to_redis(hash, text, content):
-    r = redis.Redis()
+def add_to_redis(hash_value, text, content):
+    r = get_redis_client()
 
-    mp3_key = 'mp3_' + hash
+    mp3_key = 'mp3_' + hash_value
     r.set(mp3_key, content)
 
-    text_key = 'text_' + hash
+    text_key = 'text_' + hash_value
     r.set(text_key, text)
 
     log(LOG_INFO, 'Redis: Added sound stream with key ' + mp3_key + ' for text "' + text + '"')
@@ -123,11 +129,14 @@ def add_to_redis(hash, text, content):
 
 def text_to_speech(message):
     text = str(message['text'])
-    hash = md5(text.encode()).hexdigest()
+    text_hash = md5(text.encode()).hexdigest()
     output = os.path.join(gettempdir(), "speech.mp3")
 
+    content = None
     success = False
-    content = get_from_redis(hash)
+
+    if REDIS_ENABLE:
+        content = get_from_redis(text_hash)
 
     if content:
         log(LOG_INFO, "Found cached sound file in Redis")
@@ -141,7 +150,10 @@ def text_to_speech(message):
             log(LOG_INFO, "Generated new sound file with Polly")
             with open(output, "wb") as file:
                 file.write(content)
-            add_to_redis(hash, text, content)
+
+            if REDIS_ENABLE:
+                add_to_redis(text_hash, text, content)
+
             success = True
 
     if success:
