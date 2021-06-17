@@ -17,7 +17,7 @@ Import class or run as stand-alone application.
 
 - prepare mqtt server + topic
 - optionally configure Redis for caching
-- configure required variables (see env.dist for details)
+- configure required variables (see env.dist and `main()` function for details)
 - start program (stand-alone) or execute method `start_runner` (class usage)
 - send MQTT message with `text` attribute
 

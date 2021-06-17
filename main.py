@@ -45,24 +45,6 @@ class MqttToSpeech:
 
     runner = None
 
-    def configure_by_env_vars(self):
-        load_dotenv()
-
-        self.mqtt_broker = os.getenv('MQTT_HOST')
-        self.mqtt_port = int(os.getenv('MQTT_PORT'))
-        self.mqtt_topic = os.getenv('MQTT_TOPIC')
-        self.mqtt_username = os.getenv('MQTT_USERNAME')
-        self.mqtt_password = os.getenv('MQTT_PASSWORD')
-        self.mqtt_ca_path = os.getenv('MQTT_CA_PATH')
-        self.mqtt_client_id = f'python-mqtt-{random.randint(0, 1000)}'
-
-        self.voiceId = os.getenv('POLLY_VOICE_ID')
-        self.engine = os.getenv('POLLY_ENGINE')
-        self.outputFormat = os.getenv('POLLY_OUTPUT_FORMAT')
-
-        self.log_level = int(os.getenv('LOG_LEVEL'))
-        self.use_redis = bool(int(os.getenv('USE_REDIS')))
-
     def _log(self, level, msg):
         log_levels = {
             1: 'ERROR',
@@ -207,17 +189,19 @@ class MqttToSpeech:
         self.log_info('Play sound stream')
 
         try:
-            pygame.mixer.init()
+            mixer = pygame.mixer
+            mixer.init()
 
             self.log_debug("Load stream")
-            pygame.mixer.music.load(io.BytesIO(buffer))
+            mixer.music.load(io.BytesIO(buffer))
 
             self.log_debug("Play stream")
-            pygame.mixer.music.play()
+            mixer.music.play()
 
             while pygame.mixer.music.get_busy():
-                time.sleep(1)
+                time.sleep(0.5)
 
+            mixer.music.unload()
             self.log_debug("Finished playing.")
         except Exception as err:
             self.log_error('Failed to play sound stream: ' + str(err))
@@ -231,8 +215,24 @@ class MqttToSpeech:
 
 
 def main():
+    load_dotenv()
+
     mqtt_to_speech = MqttToSpeech()
-    mqtt_to_speech.configure_by_env_vars()
+
+    mqtt_to_speech.mqtt_broker = os.getenv('MQTT_HOST')
+    mqtt_to_speech.mqtt_port = int(os.getenv('MQTT_PORT'))
+    mqtt_to_speech.mqtt_topic = os.getenv('MQTT_TOPIC')
+    mqtt_to_speech.mqtt_username = os.getenv('MQTT_USERNAME')
+    mqtt_to_speech.mqtt_password = os.getenv('MQTT_PASSWORD')
+    mqtt_to_speech.mqtt_ca_path = os.getenv('MQTT_CA_PATH')
+    mqtt_to_speech.mqtt_client_id = f'python-mqtt-{random.randint(0, 1000)}'
+
+    mqtt_to_speech.voiceId = os.getenv('POLLY_VOICE_ID')
+    mqtt_to_speech.engine = os.getenv('POLLY_ENGINE')
+    mqtt_to_speech.outputFormat = os.getenv('POLLY_OUTPUT_FORMAT')
+
+    mqtt_to_speech.log_level = int(os.getenv('LOG_LEVEL'))
+    mqtt_to_speech.use_redis = bool(int(os.getenv('USE_REDIS')))
 
     try:
         mqtt_to_speech.start_runner()
