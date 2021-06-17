@@ -5,11 +5,12 @@ import json
 import os
 import random
 import ssl
-import subprocess
-import sys
+import io
+import time
+
+import pygame
 from contextlib import closing
 from hashlib import md5
-from tempfile import gettempdir
 
 import boto3
 import paho.mqtt.client as mqtt
@@ -68,8 +69,11 @@ def on_mqtt_message(client, userdata, message):
     log(LOG_DEBUG, "MQTT-in: topic=" + str(message.topic) + ' qos=' + str(message.qos) + ' retain=' +
         str(message.retain) + ' payload=' + str(payload))
 
-    json_payload = json.loads(payload)
-    text_to_speech(json_payload)
+    try:
+        json_payload = json.loads(payload)
+        text_to_speech(json_payload)
+    except Exception as err:
+        log(LOG_DEBUG, 'on_mqtt_message: An error occurred: ' + str(err))
 
 
 def get_mqtt_client():
@@ -81,19 +85,10 @@ def get_mqtt_client():
                    tls_version=ssl.PROTOCOL_TLSv1_2)
     client.tls_insecure_set(True)
     client.username_pw_set(mqtt_username, mqtt_password)
+
     log(LOG_INFO, "connecting to broker " + mqtt_broker)
     client.connect(mqtt_broker, mqtt_port)
-
-    # wait to allow publish and logging and exit
-
-    timestamp = datetime.datetime.now()
-    msg = json.dumps({
-        'state': True,
-        'ts': timestamp.timestamp(),
-        'data': 'heyho'
-    })
-
-#    client.publish(mqtt_topic, msg)
+    log(LOG_INFO, "subscribing topic " + mqtt_topic)
     client.subscribe(mqtt_topic)
 
     return client
@@ -108,10 +103,10 @@ def get_from_redis(hash_value):
     key = 'mp3_' + hash_value
 
     if r.exists(key):
-        log(LOG_INFO, 'Redis: Get key ' + key)
+        log(LOG_DEBUG, 'Redis: Get key ' + key)
         return r.get(key)
     else:
-        log(LOG_INFO, 'Redis: No such key ' + key)
+        log(LOG_DEBUG, 'Redis: No such key ' + key)
     return None
 
 
@@ -130,34 +125,28 @@ def add_to_redis(hash_value, text, content):
 def text_to_speech(message):
     text = str(message['text'])
     text_hash = md5(text.encode()).hexdigest()
-    output = os.path.join(gettempdir(), "speech.mp3")
 
-    content = None
+    content_buffer = None
     success = False
 
     if REDIS_ENABLE:
-        content = get_from_redis(text_hash)
+        content_buffer = get_from_redis(text_hash)
 
-    if content:
-        log(LOG_INFO, "Found cached sound file in Redis")
-        with open(output, "wb") as file:
-            file.write(content)
+    if content_buffer:
+        log(LOG_INFO, "Found cached sound stream in Redis")
         success = True
     else:
-        content = get_from_polly(text)
+        content_buffer = get_from_polly(text)
 
-        if content:
-            log(LOG_INFO, "Generated new sound file with Polly")
-            with open(output, "wb") as file:
-                file.write(content)
-
+        if content_buffer:
+            log(LOG_INFO, "Generated new sound stream with Polly")
             if REDIS_ENABLE:
-                add_to_redis(text_hash, text, content)
+                add_to_redis(text_hash, text, content_buffer)
 
             success = True
 
     if success:
-        play_file(output)
+        play_stream(content_buffer)
 
 
 def get_from_polly(message):
@@ -174,37 +163,46 @@ def get_from_polly(message):
         ssml_text = '<speak>' + message + '</speak>'
 
         response = polly.synthesize_speech(OutputFormat=outputFormat, VoiceId=voiceId, Engine=engine,
-                   TextType='ssml',
-                   Text=str(ssml_text))
+                                           TextType='ssml', Text=ssml_text)
     except (BotoCoreError, ClientError) as error:
         log(LOG_ERROR, error)
 
     # Access the audio stream from the response
     if "AudioStream" in response:
+        log(LOG_DEBUG, "Found AudioStream in Polly response")
+
         # Note: Closing the stream is important because the service throttles on the
         # number of parallel connections. Here we are using contextlib.closing to
         # ensure the close method of the stream object will be called automatically
         # at the end of the with statement's scope.
-
         try:
-            with closing(response['AudioStream']) as stream:
-                return stream.read()
-        except IOError as error:
+            with closing(response['AudioStream']) as polly_stream:
+                return polly_stream.read()
+        except Exception as error:
             log(LOG_ERROR, error)
     else:
         # The response didn't contain audio data, exit gracefully
         log(LOG_ERROR, "Could not retrieve stream from Polly")
 
 
-def play_file(path):
-    log(LOG_INFO, 'Play sound file ' + path)
-    # Play the audio using the platform's default player
-    if sys.platform == "win32":
-        os.startfile(path)
-    else:
-        # The following works on macOS and Linux. (Darwin = mac, xdg-open = linux).
-        opener = "open" if sys.platform == "darwin" else "xdg-open"
-        subprocess.call([opener, path])
+def play_stream(buffer):
+    log(LOG_INFO, 'Play sound stream')
+
+    try:
+        pygame.mixer.init()
+
+        log(LOG_DEBUG, "Load stream")
+        pygame.mixer.music.load(io.BytesIO(buffer))
+
+        log(LOG_DEBUG, "Play stream")
+        pygame.mixer.music.play()
+
+        while pygame.mixer.music.get_busy():
+            time.sleep(1)
+
+        log(LOG_DEBUG, "Finished playing.")
+    except Exception as err:
+        log(LOG_ERROR, 'Failed to play sound stream: ' + str(err))
 
 
 mqtt_client = get_mqtt_client()
