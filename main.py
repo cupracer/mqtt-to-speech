@@ -35,9 +35,9 @@ class MqttToSpeech:
     outputFormat = None
 
     # Logging
-    LOG_ERROR = 1
-    LOG_INFO = 2
-    LOG_DEBUG = 3
+    _LOG_ERROR = 1
+    _LOG_INFO = 2
+    _LOG_DEBUG = 3
     log_level = 2
 
     # Redis
@@ -63,7 +63,7 @@ class MqttToSpeech:
         self.log_level = int(os.getenv('LOG_LEVEL'))
         self.use_redis = bool(int(os.getenv('USE_REDIS')))
 
-    def log(self, level, msg):
+    def _log(self, level, msg):
         log_levels = {
             1: 'ERROR',
             2: 'INFO ',
@@ -74,22 +74,31 @@ class MqttToSpeech:
             formatted_timestamp = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
             print(formatted_timestamp + ' [' + log_levels[level] + ']: ' + msg)
 
+    def log_info(self, msg):
+        self._log(self._LOG_INFO, msg)
+
+    def log_error(self, msg):
+        self._log(self._LOG_ERROR, msg)
+
+    def log_debug(self, msg):
+        self._log(self._LOG_DEBUG, msg)
+
     def on_mqtt_log(self, client, userdata, level, buf):
-        self.log(self.LOG_DEBUG, buf)
+        self._log(self._LOG_DEBUG, buf)
 
     def on_mqtt_connect(self, client, userdata, flags, rc):
-        self.log(self.LOG_INFO, 'MQTT: Connected.')
+        self.log_info('MQTT: Connected.')
 
     def on_mqtt_message(self, client, userdata, message):
         payload = message.payload.decode("utf-8")
-        self.log(self.LOG_DEBUG, "MQTT-in: topic=" + str(message.topic) + ' qos=' + str(message.qos) + ' retain=' +
+        self.log_debug("MQTT-in: topic=" + str(message.topic) + ' qos=' + str(message.qos) + ' retain=' +
                  str(message.retain) + ' payload=' + str(payload))
 
         try:
             json_payload = json.loads(payload)
             self.text_to_speech(json_payload)
         except Exception as err:
-            self.log(self.LOG_DEBUG, 'on_mqtt_message: An error occurred: ' + str(err))
+            self.log_debug('on_mqtt_message: An error occurred: ' + str(err))
 
     def get_mqtt_client(self):
         client = mqtt.Client()
@@ -101,9 +110,9 @@ class MqttToSpeech:
         client.tls_insecure_set(True)
         client.username_pw_set(self.mqtt_username, self.mqtt_password)
 
-        self.log(self.LOG_INFO, "connecting to broker " + self.mqtt_broker)
+        self.log_info("connecting to broker " + self.mqtt_broker)
         client.connect(self.mqtt_broker, self.mqtt_port)
-        self.log(self.LOG_INFO, "subscribing topic " + self.mqtt_topic)
+        self.log_info("subscribing topic " + self.mqtt_topic)
         client.subscribe(self.mqtt_topic)
 
         return client
@@ -113,10 +122,10 @@ class MqttToSpeech:
         key = 'mp3_' + hash_value
 
         if r.exists(key):
-            self.log(self.LOG_DEBUG, 'Redis: Get key ' + key)
+            self.log_debug('Redis: Get key ' + key)
             return r.get(key)
         else:
-            self.log(self.LOG_DEBUG, 'Redis: No such key ' + key)
+            self.log_debug('Redis: No such key ' + key)
         return None
 
     def add_to_redis(self, hash_value, text, content):
@@ -128,7 +137,7 @@ class MqttToSpeech:
         text_key = 'text_' + hash_value
         r.set(text_key, text)
 
-        self.log(self.LOG_INFO, 'Redis: Added sound stream with key ' + mp3_key + ' for text "' + text + '"')
+        self.log_info('Redis: Added sound stream with key ' + mp3_key + ' for text "' + text + '"')
 
     def text_to_speech(self, message):
         text = str(message['text'])
@@ -141,13 +150,13 @@ class MqttToSpeech:
             content_buffer = self.get_from_redis(text_hash)
 
         if content_buffer:
-            self.log(self.LOG_INFO, "Found cached sound stream in Redis")
+            self.log_info("Found cached sound stream in Redis")
             success = True
         else:
             content_buffer = self.get_from_polly(text)
 
             if content_buffer:
-                self.log(self.LOG_INFO, "Generated new sound stream with Polly")
+                self.log_info("Generated new sound stream with Polly")
                 if self.use_redis:
                     self.add_to_redis(text_hash, text, content_buffer)
 
@@ -166,7 +175,7 @@ class MqttToSpeech:
         response = None
 
         try:
-            self.log(self.LOG_INFO, 'Requesting Polly speech synthesis')
+            self.log_info('Requesting Polly speech synthesis')
             ssml_text = '<speak>' + message + '</speak>'
 
             response = polly.synthesize_speech(OutputFormat=self.outputFormat,
@@ -175,11 +184,11 @@ class MqttToSpeech:
                                                TextType='ssml',
                                                Text=ssml_text)
         except (BotoCoreError, ClientError) as error:
-            self.log(self.LOG_ERROR, error)
+            self.log_error(error)
 
         # Access the audio stream from the response
         if "AudioStream" in response:
-            self.log(self.LOG_DEBUG, "Found AudioStream in Polly response")
+            self.log_debug("Found AudioStream in Polly response")
 
             # Note: Closing the stream is important because the service throttles on the
             # number of parallel connections. Here we are using contextlib.closing to
@@ -189,29 +198,29 @@ class MqttToSpeech:
                 with closing(response['AudioStream']) as polly_stream:
                     return polly_stream.read()
             except Exception as error:
-                self.log(self.LOG_ERROR, error)
+                self.log_error(error)
         else:
             # The response didn't contain audio data, exit gracefully
-            self.log(self.LOG_ERROR, "Could not retrieve stream from Polly")
+            self.log_error("Could not retrieve stream from Polly")
 
     def play_stream(self, buffer):
-        self.log(self.LOG_INFO, 'Play sound stream')
+        self.log_info('Play sound stream')
 
         try:
             pygame.mixer.init()
 
-            self.log(self.LOG_DEBUG, "Load stream")
+            self.log_debug("Load stream")
             pygame.mixer.music.load(io.BytesIO(buffer))
 
-            self.log(self.LOG_DEBUG, "Play stream")
+            self.log_debug("Play stream")
             pygame.mixer.music.play()
 
             while pygame.mixer.music.get_busy():
                 time.sleep(1)
 
-            self.log(self.LOG_DEBUG, "Finished playing.")
+            self.log_debug("Finished playing.")
         except Exception as err:
-            self.log(self.LOG_ERROR, 'Failed to play sound stream: ' + str(err))
+            self.log_error('Failed to play sound stream: ' + str(err))
 
     def start_runner(self):
         self.runner = self.get_mqtt_client()
@@ -228,10 +237,10 @@ def main():
     try:
         mqtt_to_speech.start_runner()
     except KeyboardInterrupt:
-        mqtt_to_speech.log(mqtt_to_speech.LOG_INFO, "Exiting.")
+        mqtt_to_speech.log_info("Exiting.")
         mqtt_to_speech.kill_runner()
     finally:
-        mqtt_to_speech.log(mqtt_to_speech.LOG_INFO, "End.")
+        mqtt_to_speech.log_info("End.")
 
 
 if __name__ == "__main__":
