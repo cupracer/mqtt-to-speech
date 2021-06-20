@@ -17,6 +17,7 @@ import paho.mqtt.client as mqtt
 import redis
 from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
+from src.utils import get_project_root
 
 
 class MqttToSpeech:
