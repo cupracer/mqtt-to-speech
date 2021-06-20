@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
-import datetime
 import json
+import logging
 import os
 import random
 import ssl
-
 from contextlib import closing
 from hashlib import md5
 
@@ -34,12 +33,6 @@ class MqttToSpeech:
     engine = None
     outputFormat = None
 
-    # Logging
-    _LOG_ERROR = 1
-    _LOG_INFO = 2
-    _LOG_DEBUG = 3
-    log_level = 2
-
     # Redis
     use_redis = False
 
@@ -53,6 +46,9 @@ class MqttToSpeech:
         # args -- tuple of anonymous arguments
         # kwargs -- dictionary of named arguments
 
+        log_level = str(kwargs.get('log_level', 'DEBUG'))
+        logging.basicConfig(format='%(asctime)s %(levelname)s:\t %(message)s', level=log_level.upper())
+
         self.mqtt_broker = str(kwargs.get('mqtt_broker'))
         self.mqtt_port = int(kwargs.get('mqtt_port', 8883))
         self.mqtt_topic = str(kwargs.get('mqtt_topic'))
@@ -65,46 +61,25 @@ class MqttToSpeech:
         self.engine = str(kwargs.get('polly_engine', 'neural'))
         self.outputFormat = str(kwargs.get('polly_output_format', 'mp3'))
 
-        self.log_level = int(kwargs.get('log_level', 2))
         self.use_redis = bool(int(kwargs.get('use_redis', 0)))
         self.message_prefix_sound_file = str(kwargs.get('message_prefix_sound_file', None))
 
-    def _log(self, level, msg):
-        log_levels = {
-            1: 'ERROR',
-            2: 'INFO ',
-            3: 'DEBUG',
-        }
-
-        if level <= self.log_level:
-            formatted_timestamp = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-            print(formatted_timestamp + ' [' + log_levels[level] + ']: ' + msg)
-
-    def log_info(self, msg):
-        self._log(self._LOG_INFO, msg)
-
-    def log_error(self, msg):
-        self._log(self._LOG_ERROR, msg)
-
-    def log_debug(self, msg):
-        self._log(self._LOG_DEBUG, msg)
-
     def on_mqtt_log(self, client, userdata, level, buf):
-        self._log(self._LOG_DEBUG, buf)
+        logging.debug(buf)
 
     def on_mqtt_connect(self, client, userdata, flags, rc):
-        self.log_info('MQTT: Connected.')
+        logging.info('MQTT: Connected.')
 
     def on_mqtt_message(self, client, userdata, message):
         payload = message.payload.decode("utf-8")
-        self.log_debug("MQTT-in: topic=" + str(message.topic) + ' qos=' + str(message.qos) + ' retain=' +
+        logging.debug("MQTT-in: topic=" + str(message.topic) + ' qos=' + str(message.qos) + ' retain=' +
                  str(message.retain) + ' payload=' + str(payload))
 
         try:
             json_payload = json.loads(payload)
             self.text_to_speech(json_payload)
         except Exception as err:
-            self.log_debug('on_mqtt_message: An error occurred: ' + str(err))
+            logging.debug('on_mqtt_message: An error occurred: ' + str(err))
 
     def get_mqtt_client(self):
         client = mqtt.Client()
@@ -116,9 +91,9 @@ class MqttToSpeech:
         client.tls_insecure_set(True)
         client.username_pw_set(self.mqtt_username, self.mqtt_password)
 
-        self.log_info("connecting to broker " + self.mqtt_broker)
+        logging.info("connecting to broker " + self.mqtt_broker)
         client.connect(self.mqtt_broker, self.mqtt_port)
-        self.log_info("subscribing topic " + self.mqtt_topic)
+        logging.info("subscribing topic " + self.mqtt_topic)
         client.subscribe(self.mqtt_topic)
 
         return client
@@ -128,10 +103,10 @@ class MqttToSpeech:
         key = 'mp3_' + hash_value
 
         if r.exists(key):
-            self.log_debug('Redis: Get key ' + key)
+            logging.debug('Redis: Get key ' + key)
             return r.get(key)
         else:
-            self.log_debug('Redis: No such key ' + key)
+            logging.debug('Redis: No such key ' + key)
         return None
 
     def add_to_redis(self, hash_value, text, content):
@@ -143,7 +118,7 @@ class MqttToSpeech:
         text_key = 'text_' + hash_value
         r.set(text_key, text)
 
-        self.log_info('Redis: Added sound stream with key ' + mp3_key + ' for text "' + text + '"')
+        logging.info('Redis: Added sound stream with key ' + mp3_key + ' for text "' + text + '"')
 
     def get_message_prefix_sound_buffer(self):
         if not self.message_prefix_sound_file:
@@ -166,13 +141,13 @@ class MqttToSpeech:
             content_buffer = self.get_from_redis(text_hash)
 
         if content_buffer:
-            self.log_info("Found cached sound stream in Redis")
+            logging.info("Found cached sound stream in Redis")
             success = True
         else:
             content_buffer = self.get_from_polly(text)
 
             if content_buffer:
-                self.log_info("Generated new sound stream with Polly")
+                logging.info("Generated new sound stream with Polly")
                 if self.use_redis:
                     self.add_to_redis(text_hash, text, content_buffer)
 
@@ -182,11 +157,11 @@ class MqttToSpeech:
             prefix_sound = self.get_message_prefix_sound_buffer()
 
             if not self.player or not self.player.is_alive():
-                self.log_info("Play sound stream with prefix")
+                logging.info("Play sound stream with prefix")
                 self.player = Player(content_buffer, prefix_sound)
             else:
                 self.player.join()
-                self.log_info("Play sound stream without prefix")
+                logging.info("Play sound stream without prefix")
                 self.player = Player(content_buffer)
 
             self.player.start()
@@ -201,7 +176,7 @@ class MqttToSpeech:
         response = None
 
         try:
-            self.log_info('Requesting Polly speech synthesis')
+            logging.info('Requesting Polly speech synthesis')
             ssml_text = '<speak>' + message + '</speak>'
 
             response = polly.synthesize_speech(OutputFormat=self.outputFormat,
@@ -210,11 +185,11 @@ class MqttToSpeech:
                                                TextType='ssml',
                                                Text=ssml_text)
         except (BotoCoreError, ClientError) as error:
-            self.log_error(error)
+            logging.error(error)
 
         # Access the audio stream from the response
         if "AudioStream" in response:
-            self.log_debug("Found AudioStream in Polly response")
+            logging.debug("Found AudioStream in Polly response")
 
             # Note: Closing the stream is important because the service throttles on the
             # number of parallel connections. Here we are using contextlib.closing to
@@ -224,10 +199,10 @@ class MqttToSpeech:
                 with closing(response['AudioStream']) as polly_stream:
                     return polly_stream.read()
             except Exception as error:
-                self.log_error(error)
+                logging.error(error)
         else:
             # The response didn't contain audio data, exit gracefully
-            self.log_error("Could not retrieve stream from Polly")
+            logging.error("Could not retrieve stream from Polly")
 
     def start_runner(self):
         self.runner = self.get_mqtt_client()
@@ -251,7 +226,7 @@ def main():
         polly_voice_id=os.getenv('POLLY_VOICE_ID'),
         polly_engine=os.getenv('POLLY_ENGINE'),
         polly_output_format=os.getenv('POLLY_OUTPUT_FORMAT'),
-        log_level=int(os.getenv('LOG_LEVEL')),
+        log_level=str(os.getenv('LOG_LEVEL')),
         use_redis=bool(int(os.getenv('USE_REDIS'))),
         message_prefix_sound_file=str(os.getenv('MESSAGE_PREFIX_SOUND_FILE')),
     )
@@ -259,10 +234,10 @@ def main():
     try:
         mqtt_to_speech.start_runner()
     except KeyboardInterrupt:
-        mqtt_to_speech.log_info("Exiting.")
+        logging.info("Exiting.")
         mqtt_to_speech.kill_runner()
     finally:
-        mqtt_to_speech.log_info("End.")
+        logging.info("End.")
 
 
 if __name__ == "__main__":
