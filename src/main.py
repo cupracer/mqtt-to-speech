@@ -44,6 +44,9 @@ class MqttToSpeech:
     # Redis
     use_redis = False
 
+    message_prefix_sound_file = None
+    message_prefix_sound = None
+
     runner = None
 
     def __init__(self, *args, **kwargs):
@@ -64,6 +67,7 @@ class MqttToSpeech:
 
         self.log_level = int(kwargs.get('log_level', 2))
         self.use_redis = bool(int(kwargs.get('use_redis', 0)))
+        self.message_prefix_sound_file = str(kwargs.get('message_prefix_sound_file', None))
 
     def _log(self, level, msg):
         log_levels = {
@@ -140,6 +144,16 @@ class MqttToSpeech:
         r.set(text_key, text)
 
         self.log_info('Redis: Added sound stream with key ' + mp3_key + ' for text "' + text + '"')
+
+    def get_message_prefix_sound_buffer(self):
+        if not self.message_prefix_sound_file:
+            return None
+
+        if not self.message_prefix_sound:
+            with open(os.path.join(get_project_root(), self.message_prefix_sound_file), 'rb') as infile:
+                self.message_prefix_sound = infile.read()
+
+        return self.message_prefix_sound
 
     def text_to_speech(self, message):
         text = str(message['text'])
@@ -250,6 +264,7 @@ def main():
         polly_output_format=os.getenv('POLLY_OUTPUT_FORMAT'),
         log_level=int(os.getenv('LOG_LEVEL')),
         use_redis=bool(int(os.getenv('USE_REDIS'))),
+        message_prefix_sound_file=str(os.getenv('MESSAGE_PREFIX_SOUND_FILE')),
     )
 
     try:
