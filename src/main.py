@@ -35,6 +35,7 @@ class MqttToSpeech:
 
     # Redis
     use_redis = False
+    redis_session = None
 
     message_prefix_sound_file = None
     message_prefix_sound = None
@@ -98,8 +99,17 @@ class MqttToSpeech:
 
         return client
 
+    def get_redis_session(self):
+        if not self.redis_session or not self.redis_session.ping():
+            logging.debug('Init new Redis connection')
+            self.redis_session = redis.Redis()
+        else:
+            logging.debug('Use existing Redis connection')
+
+        return self.redis_session
+
     def get_from_redis(self, hash_value):
-        r = redis.Redis()
+        r = self.get_redis_session()
         key = 'mp3_' + hash_value
 
         if r.exists(key):
@@ -110,7 +120,7 @@ class MqttToSpeech:
         return None
 
     def add_to_redis(self, hash_value, text, content):
-        r = redis.Redis()
+        r = self.get_redis_session()
 
         mp3_key = 'mp3_' + hash_value
         r.set(mp3_key, content)
