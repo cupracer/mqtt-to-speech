@@ -5,10 +5,7 @@ import json
 import os
 import random
 import ssl
-import io
-import time
 
-import pygame
 from contextlib import closing
 from hashlib import md5
 
@@ -17,6 +14,8 @@ import paho.mqtt.client as mqtt
 import redis
 from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
+
+from src.player import Player
 from src.utils import get_project_root
 
 
@@ -48,6 +47,7 @@ class MqttToSpeech:
     message_prefix_sound = None
 
     runner = None
+    player = None
 
     def __init__(self, *args, **kwargs):
         # args -- tuple of anonymous arguments
@@ -179,7 +179,17 @@ class MqttToSpeech:
                 success = True
 
         if success:
-            self.play_stream(content_buffer)
+            prefix_sound = self.get_message_prefix_sound_buffer()
+
+            if not self.player or not self.player.is_alive():
+                self.log_info("Play sound stream with prefix")
+                self.player = Player(content_buffer, prefix_sound)
+            else:
+                self.player.join()
+                self.log_info("Play sound stream without prefix")
+                self.player = Player(content_buffer)
+
+            self.player.start()
 
     def get_from_polly(self, message):
         session = boto3.Session(
@@ -218,27 +228,6 @@ class MqttToSpeech:
         else:
             # The response didn't contain audio data, exit gracefully
             self.log_error("Could not retrieve stream from Polly")
-
-    def play_stream(self, buffer):
-        self.log_info('Play sound stream')
-
-        try:
-            mixer = pygame.mixer
-            mixer.init()
-
-            self.log_debug("Load stream")
-            mixer.music.load(io.BytesIO(buffer))
-
-            self.log_debug("Play stream")
-            mixer.music.play()
-
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.5)
-
-            mixer.music.unload()
-            self.log_debug("Finished playing.")
-        except Exception as err:
-            self.log_error('Failed to play sound stream: ' + str(err))
 
     def start_runner(self):
         self.runner = self.get_mqtt_client()
