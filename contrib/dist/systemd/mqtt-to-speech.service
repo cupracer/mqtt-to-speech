@@ -1,0 +1,13 @@
+[Unit]
+Description=MQTT-to-Speech Service
+After=multi-user.target pulseaudio.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/mqtt-to-speech
+ExecStart=/home/pi/mqtt-to-speech/venv/bin/python -u ./src/main.py
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target

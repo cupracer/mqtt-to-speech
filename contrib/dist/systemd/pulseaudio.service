@@ -1,0 +1,11 @@
+[Unit]
+Description=Pulseaudio Service
+After=multi-user.target
+
+[Service]
+Type=simple
+User=pi
+ExecStart=/usr/bin/pulseaudio
+
+[Install]
+WantedBy=multi-user.target
