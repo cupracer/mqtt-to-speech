@@ -263,7 +263,14 @@ def main(standalone=True):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--standalone', dest='standalone', action=argparse.BooleanOptionalAction, default=True,
-                        help='print/omit timestamps in log messages')
+
+    # Python>=3.9 required:
+    #parser.add_argument('--standalone', dest='standalone', action=argparse.BooleanOptionalAction, default=True,
+    #                    help='print/omit timestamps in log messages')
+
+    parser.add_argument('--no-standalone', dest='standalone', action='store_false',
+                        help='omit timestamps in log messages')
+    parser.set_defaults(standalone=True)
+
     args = parser.parse_args()
     main(args.standalone)
