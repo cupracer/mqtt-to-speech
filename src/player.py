@@ -2,6 +2,7 @@ import time
 from threading import Thread
 import pygame
 import io
+import logging
 
 
 class Player(Thread):
@@ -14,7 +15,7 @@ class Player(Thread):
         self.prefix_buffer = prefix_buffer
 
     def run(self):
-        print("Child Thread:Started")
+        logging.debug("Child Thread:Started")
 
         try:
             mixer = pygame.mixer
@@ -31,6 +32,6 @@ class Player(Thread):
             while mixer.music.get_busy():
                 time.sleep(0.5)
         except Exception as err:
-            print('Failed to play sound stream: ' + str(err))
+            logging.error('Failed to play sound stream: %s', str(err))
 
-        print("Child Thread:Exiting")
+        logging.debug("Child Thread:Exiting")
