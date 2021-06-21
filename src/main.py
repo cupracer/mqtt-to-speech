@@ -51,9 +51,9 @@ class MqttToSpeech:
         log_level = str(kwargs.get('log_level', 'DEBUG'))
 
         if bool(kwargs.get('standalone', False)):
-            logging.basicConfig(format='%(asctime)s %(levelname)s:\t %(message)s', level=log_level.upper())
+            logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=log_level.upper())
         else:
-            logging.basicConfig(format='%(levelname)s:\t %(message)s', level=log_level.upper())
+            logging.basicConfig(format='%(levelname)s: %(message)s', level=log_level.upper())
 
         self.mqtt_broker = str(kwargs.get('mqtt_broker'))
         self.mqtt_port = int(kwargs.get('mqtt_port', 8883))
