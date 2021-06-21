@@ -139,10 +139,11 @@ class MqttToSpeech:
             try:
                 with open(os.path.join(get_project_root(), self.message_prefix_sound_file), 'rb') as infile:
                     self.message_prefix_sound = infile.read()
-                    return self.message_prefix_sound
             except FileNotFoundError as err:
                 logging.error('Could not read prefix sound file: %s', err)
                 return None
+
+        return self.message_prefix_sound
 
     def text_to_speech(self, message):
         text = str(message['text'])
