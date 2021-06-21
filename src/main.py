@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import logging
 import os
@@ -48,7 +49,11 @@ class MqttToSpeech:
         # kwargs -- dictionary of named arguments
 
         log_level = str(kwargs.get('log_level', 'DEBUG'))
-        logging.basicConfig(format='%(asctime)s %(levelname)s:\t %(message)s', level=log_level.upper())
+
+        if bool(kwargs.get('standalone', False)):
+            logging.basicConfig(format='%(asctime)s %(levelname)s:\t %(message)s', level=log_level.upper())
+        else:
+            logging.basicConfig(format='%(levelname)s:\t %(message)s', level=log_level.upper())
 
         self.mqtt_broker = str(kwargs.get('mqtt_broker'))
         self.mqtt_port = int(kwargs.get('mqtt_port', 8883))
@@ -227,10 +232,11 @@ class MqttToSpeech:
         self.runner.loop_stop()
 
 
-def main():
+def main(standalone=True):
     load_dotenv()
 
     mqtt_to_speech = MqttToSpeech(
+        standalone=standalone,
         mqtt_broker=os.getenv('MQTT_HOST'),
         mqtt_port=int(os.getenv('MQTT_PORT')),
         mqtt_topic=os.getenv('MQTT_TOPIC'),
@@ -256,4 +262,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--standalone', dest='standalone', action=argparse.BooleanOptionalAction, default=True,
+                        help='print/omit timestamps in log messages')
+    args = parser.parse_args()
+    main(args.standalone)

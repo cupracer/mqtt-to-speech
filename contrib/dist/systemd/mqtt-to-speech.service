@@ -6,7 +6,7 @@ After=multi-user.target pulseaudio.service
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/mqtt-to-speech
-ExecStart=/home/pi/mqtt-to-speech/venv/bin/python -u ./src/main.py
+ExecStart=/home/pi/mqtt-to-speech/venv/bin/python -u ./src/main.py --no-standalone
 Restart=on-abort
 
 [Install]
