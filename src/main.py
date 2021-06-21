@@ -14,8 +14,8 @@ import redis
 from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
 
-from src.player import Player
-from src.utils import get_project_root
+from player import Player
+from utils import get_project_root
 
 
 class MqttToSpeech:
