@@ -40,6 +40,7 @@ class MqttToSpeech:
 
     message_prefix_sound_file = None
     message_prefix_sound = None
+    message_default_volume = 0.8
 
     runner = None
     player = None
@@ -68,7 +69,7 @@ class MqttToSpeech:
         self.outputFormat = str(kwargs.get('polly_output_format', 'mp3'))
 
         self.use_redis = bool(int(kwargs.get('use_redis', 0)))
-        self.message_prefix_sound_file = str(kwargs.get('message_prefix_sound_file', None))
+        self.message_prefix_sound_file = kwargs.get('message_prefix_sound_file', None)
 
     def on_mqtt_log(self, client, userdata, level, buf):
         logging.debug(buf)
@@ -136,7 +137,7 @@ class MqttToSpeech:
         logging.info('Redis: Added sound stream with key ' + mp3_key + ' for text "' + text + '"')
 
     def get_message_prefix_sound_buffer(self):
-        if not self.message_prefix_sound_file:
+        if self.message_prefix_sound_file is None:
             logging.debug('Prefix sound file not set.')
             return None
 
@@ -153,6 +154,10 @@ class MqttToSpeech:
     def text_to_speech(self, message):
         text = str(message['text'])
         text_hash = md5(text.encode()).hexdigest()
+        volume_percent = 100
+
+        if 'volume' in message:
+            volume_percent = int(message['volume'])
 
         content_buffer = None
         success = False
@@ -177,12 +182,26 @@ class MqttToSpeech:
             prefix_sound = self.get_message_prefix_sound_buffer()
 
             if not self.player or not self.player.is_alive():
-                logging.info("Play sound stream with prefix")
-                self.player = Player(content_buffer, prefix_sound)
+                if prefix_sound:
+                    logging.info("Play sound stream with prefix")
+                    self.player = Player(
+                        message_buffer=content_buffer,
+                        prefix_buffer=prefix_sound,
+                        volume_percent=volume_percent
+                    )
+                else:
+                    logging.info("Play sound stream without prefix")
+                    self.player = Player(
+                        message_buffer=content_buffer,
+                        volume_percent=volume_percent
+                    )
             else:
                 self.player.join()
                 logging.info("Play sound stream without prefix")
-                self.player = Player(content_buffer)
+                self.player = Player(
+                    message_buffer=content_buffer,
+                    volume_percent=volume_percent
+                )
 
             self.player.start()
 
@@ -249,7 +268,7 @@ def main(standalone=True):
         polly_output_format=os.getenv('POLLY_OUTPUT_FORMAT'),
         log_level=str(os.getenv('LOG_LEVEL')),
         use_redis=bool(int(os.getenv('USE_REDIS'))),
-        message_prefix_sound_file=str(os.getenv('MESSAGE_PREFIX_SOUND_FILE')),
+        message_prefix_sound_file=os.getenv('MESSAGE_PREFIX_SOUND_FILE'),
     )
 
     try:
