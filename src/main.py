@@ -76,6 +76,8 @@ class MqttToSpeech:
 
     def on_mqtt_connect(self, client, userdata, flags, rc):
         logging.info('MQTT: Connected.')
+        logging.info("MQTT: Subscribing topic " + self.mqtt_topic)
+        client.subscribe(self.mqtt_topic)
 
     def on_mqtt_disconnect(self, client, userdata, rc):
         logging.info('MQTT: Disconnected.')
@@ -104,8 +106,6 @@ class MqttToSpeech:
 
         logging.info("connecting to broker " + self.mqtt_broker)
         client.connect(self.mqtt_broker, self.mqtt_port)
-        logging.info("subscribing topic " + self.mqtt_topic)
-        client.subscribe(self.mqtt_topic)
 
         return client
 
