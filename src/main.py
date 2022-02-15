@@ -77,6 +77,9 @@ class MqttToSpeech:
     def on_mqtt_connect(self, client, userdata, flags, rc):
         logging.info('MQTT: Connected.')
 
+    def on_mqtt_disconnect(self, client, userdata, rc):
+        logging.info('MQTT: Disconnected.')
+
     def on_mqtt_message(self, client, userdata, message):
         payload = message.payload.decode("utf-8")
         logging.debug("MQTT-in: topic=" + str(message.topic) + ' qos=' + str(message.qos) + ' retain=' +
@@ -93,6 +96,7 @@ class MqttToSpeech:
         client.on_message = self.on_mqtt_message
         client.on_log = self.on_mqtt_log
         client.on_connect = self.on_mqtt_connect
+        client.on_disconnect = self.on_mqtt_disconnect
         client.tls_set(self.mqtt_ca_path,
                        tls_version=ssl.PROTOCOL_TLSv1_2)
         client.tls_insecure_set(True)
